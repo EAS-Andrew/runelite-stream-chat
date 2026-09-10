@@ -17,7 +17,7 @@ Read-only. It never sends anything to a stream, never types in game, and never r
 
 ## Install
 
-**Plugin Hub** (once merged): RuneLite &rarr; wrench icon &rarr; *Plugin Hub* &rarr; search "Stream Chat".
+**Plugin Hub** (pending [PR #16360](https://github.com/runelite/plugin-hub/pull/16360)): RuneLite &rarr; wrench icon &rarr; *Plugin Hub* &rarr; search "Stream Chat".
 
 **Local build:**
 
@@ -176,8 +176,9 @@ they are hand-placed pixel art with no antialiasing &mdash; see `tools/make_icon
 | `youtube/` | Data API v3 polling + target parsing |
 | `kick/` | Pusher chatroom socket |
 
-### Before submitting to the Plugin Hub
+## Status
 
-- The `author` field is set to `EAS-Andrew`.
-- Push to a **public** repo and open a PR against
-  [runelite/plugin-hub](https://github.com/runelite/plugin-hub).
+Submitted to the RuneLite Plugin Hub: [runelite/plugin-hub#16360](https://github.com/runelite/plugin-hub/pull/16360).
+
+Until it is merged, install by building locally (`./gradlew build`) and running `./gradlew runClient`,
+or by dropping the built jar from `build/libs/` into `~/.runelite/plugins/`.
