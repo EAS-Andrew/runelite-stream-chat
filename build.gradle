@@ -1,0 +1,70 @@
+/*
+ * Stream Chat - RuneLite plugin.
+ *
+ * This build file is for local development only. The Plugin Hub builds the
+ * plugin itself using its own standard build script (see the `build=standard`
+ * key in runelite-plugin.properties), so nothing here ships to users.
+ *
+ * The plugin deliberately declares NO third-party dependencies. Everything it
+ * needs -- OkHttp (including its WebSocket client), Gson, Guava and Guice -- is
+ * already on the RuneLite classpath at runtime. Adding dependencies would
+ * require Gradle dependency verification hashes and significantly extends
+ * Plugin Hub review.
+ */
+plugins {
+	id 'java'
+}
+
+repositories {
+	mavenLocal()
+	maven {
+		url = 'https://repo.runelite.net'
+		content {
+			includeGroupByRegex 'net\\.runelite.*'
+		}
+	}
+	mavenCentral()
+}
+
+def runeLiteVersion = '1.12.38'
+
+dependencies {
+	compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
+
+	compileOnly 'org.projectlombok:lombok:1.18.30'
+	annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+	testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+	testImplementation 'junit:junit:4.13.2'
+	testImplementation 'org.slf4j:slf4j-simple:1.7.25'
+	testCompileOnly 'org.projectlombok:lombok:1.18.30'
+	testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+}
+
+group = 'com.streamchat'
+version = '1.0.0'
+
+tasks.withType(JavaCompile).configureEach {
+	// RuneLite plugins target Java 11. Compiling with --release (rather than
+	// source/targetCompatibility) also checks the API surface, so a Java 12+
+	// method cannot sneak in and fail at runtime on an older client.
+	options.release = 11
+	options.encoding = 'UTF-8'
+}
+
+// Dev launcher: starts a real RuneLite client with this plugin loaded as a
+// builtin.  ./gradlew runClient
+tasks.register('runClient', JavaExec) {
+	group = 'application'
+	description = 'Run RuneLite with the Stream Chat plugin loaded'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'com.streamchat.StreamChatPluginTest'
+	// -ea: required by ExternalPluginManager.loadBuiltin.
+	// --add-exports: RuneLite's macOS full-screen adapter touches the
+	// encapsulated com.apple.eawt package; the official launcher exports it too.
+	jvmArgs = [
+		'-ea',
+		'--add-exports=java.desktop/com.apple.eawt=ALL-UNNAMED'
+	]
+	args = ['--developer-mode']
+}
