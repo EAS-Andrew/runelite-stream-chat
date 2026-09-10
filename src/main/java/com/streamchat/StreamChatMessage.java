@@ -34,4 +34,21 @@ public class StreamChatMessage
 	 * platform does not supply one.
 	 */
 	String id;
+
+	/** Set when this is a notable event (a sub, raid, donation) rather than an ordinary line. */
+	@Nullable
+	StreamEventType eventType;
+
+	/**
+	 * True when the message carries no words of its own -- only emotes.
+	 *
+	 * <p>Determined per-platform from what the platform actually tells us about emote positions,
+	 * not guessed from the text, so it never hides a real message.
+	 */
+	boolean emoteOnly;
+
+	public boolean isEvent()
+	{
+		return eventType != null;
+	}
 }

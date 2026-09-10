@@ -3,6 +3,7 @@ package com.streamchat.twitch;
 import com.streamchat.AbstractChatSource;
 import com.streamchat.ChatSink;
 import com.streamchat.StreamChatMessage;
+import com.streamchat.StreamEventType;
 import com.streamchat.StreamPlatform;
 import java.awt.Color;
 import java.util.List;
@@ -42,14 +43,13 @@ public class TwitchChatSource extends AbstractChatSource
 
 	private final OkHttpClient httpClient;
 	private final List<String> channels;
-	private final boolean showEvents;
 
 	private volatile WebSocket webSocket;
 	private volatile ScheduledFuture<?> watchdog;
 	private volatile long lastActivityMs;
 
 	public TwitchChatSource(ScheduledExecutorService executor, ChatSink sink, OkHttpClient httpClient,
-		List<String> channels, boolean showEvents)
+		List<String> channels)
 	{
 		super(executor, sink);
 		// A WebSocket must not inherit the shared client's read timeout, or the connection is torn
@@ -60,7 +60,6 @@ public class TwitchChatSource extends AbstractChatSource
 			.pingInterval(30, TimeUnit.SECONDS)
 			.build();
 		this.channels = channels;
-		this.showEvents = showEvents;
 	}
 
 	@Override
@@ -157,10 +156,7 @@ public class TwitchChatSource extends AbstractChatSource
 				break;
 
 			case "USERNOTICE":
-				if (showEvents)
-				{
-					handleUserNotice(msg);
-				}
+				handleUserNotice(msg);
 				break;
 
 			case "NOTICE":
@@ -203,6 +199,8 @@ public class TwitchChatSource extends AbstractChatSource
 		}
 
 		final String id = msg.tag("id");
+		// A cheer is an ordinary message that also carries bits.
+		final StreamEventType eventType = msg.tag("bits") != null ? StreamEventType.CHEER : null;
 
 		sink.onMessage(StreamChatMessage.builder()
 			.platform(StreamPlatform.TWITCH)
@@ -211,6 +209,8 @@ public class TwitchChatSource extends AbstractChatSource
 			.message(body)
 			.authorColor(parseColor(msg.tag("color")))
 			.id(id != null ? id : syntheticId(author, body))
+			.eventType(eventType)
+			.emoteOnly(isEmoteOnly(msg.trailing(), msg.tag("emotes")))
 			.build());
 	}
 
@@ -232,7 +232,114 @@ public class TwitchChatSource extends AbstractChatSource
 			.message(system)
 			.authorColor(null)
 			.id(id != null ? id : syntheticId("", system))
+			.eventType(classifyUserNotice(msg.tag("msg-id")))
 			.build());
+	}
+
+	/**
+	 * Works out whether a message is nothing but emotes, from the IRCv3 {@code emotes} tag.
+	 *
+	 * <p>The tag gives character ranges, e.g. {@code 25:0-4,12-16/1902:6-10}. If every non-space
+	 * character falls inside one of those ranges, the user typed no words of their own.
+	 *
+	 * <p>Only native Twitch emotes appear in this tag. BTTV/FFZ/7TV emotes are plain words as far
+	 * as the protocol is concerned, and identifying them would mean downloading those services'
+	 * emote lists -- which is exactly what the Plugin Hub rejects emote plugins for. So third-party
+	 * emotes are treated as ordinary text, which errs towards showing a message rather than hiding
+	 * one.
+	 */
+	static boolean isEmoteOnly(@Nullable String message, @Nullable String emotesTag)
+	{
+		if (message == null || message.isEmpty() || emotesTag == null || emotesTag.isEmpty())
+		{
+			return false;
+		}
+
+		final boolean[] covered = new boolean[message.length()];
+
+		for (String emote : emotesTag.split("/"))
+		{
+			final int colon = emote.indexOf(':');
+			if (colon == -1)
+			{
+				continue;
+			}
+
+			for (String range : emote.substring(colon + 1).split(","))
+			{
+				final int dash = range.indexOf('-');
+				if (dash == -1)
+				{
+					continue;
+				}
+
+				try
+				{
+					final int start = Integer.parseInt(range.substring(0, dash).trim());
+					final int end = Integer.parseInt(range.substring(dash + 1).trim());
+					for (int i = Math.max(0, start); i <= Math.min(covered.length - 1, end); i++)
+					{
+						covered[i] = true;
+					}
+				}
+				catch (NumberFormatException ex)
+				{
+					return false;
+				}
+			}
+		}
+
+		boolean sawEmote = false;
+		for (int i = 0; i < message.length(); i++)
+		{
+			if (covered[i])
+			{
+				sawEmote = true;
+			}
+			else if (!Character.isWhitespace(message.charAt(i)))
+			{
+				return false;
+			}
+		}
+
+		return sawEmote;
+	}
+
+	/** Maps Twitch's USERNOTICE msg-id to an event kind. */
+	static StreamEventType classifyUserNotice(@Nullable String msgId)
+	{
+		if (msgId == null)
+		{
+			return StreamEventType.OTHER;
+		}
+
+		switch (msgId)
+		{
+			case "sub":
+			case "resub":
+			case "extendsub":
+			case "primepaidupgrade":
+			case "giftpaidupgrade":
+			case "anongiftpaidupgrade":
+				return StreamEventType.SUBSCRIPTION;
+
+			case "subgift":
+			case "anonsubgift":
+			case "submysterygift":
+			case "standardpayforward":
+			case "communitypayforward":
+				return StreamEventType.GIFT;
+
+			case "raid":
+			case "unraid":
+				return StreamEventType.RAID;
+
+			case "bitsbadgetier":
+				return StreamEventType.CHEER;
+
+			default:
+				return StreamEventType.OTHER;
+		}
 	}
 
 	private void handleNotice(IrcMessage msg)

@@ -2,6 +2,8 @@ package com.streamchat.kick;
 
 import java.awt.Color;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNull;
 import org.junit.Test;
 
@@ -38,6 +40,23 @@ public class KickChatSourceTest
 	{
 		// Trimmed, so an emote-only message does not arrive as leading/trailing whitespace.
 		assertEquals("KEKW", KickChatSource.stripEmoteMarkup("  [emote:1:KEKW]  "));
+	}
+
+	@Test
+	public void detectsEmoteOnlyMessages()
+	{
+		assertTrue(KickChatSource.isEmoteOnly("[emote:37226:KEKW]"));
+		assertTrue(KickChatSource.isEmoteOnly("[emote:1:A] [emote:2:B]"));
+		assertTrue(KickChatSource.isEmoteOnly("  [emote:1:A]  "));
+	}
+
+	@Test
+	public void messagesWithWordsAreNotEmoteOnly()
+	{
+		assertFalse(KickChatSource.isEmoteOnly("lol [emote:37226:KEKW]"));
+		assertFalse(KickChatSource.isEmoteOnly("hello"));
+		assertFalse(KickChatSource.isEmoteOnly(""));
+		assertFalse(KickChatSource.isEmoteOnly(null));
 	}
 
 	@Test

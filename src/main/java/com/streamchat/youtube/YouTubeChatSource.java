@@ -7,11 +7,13 @@ import com.google.gson.JsonSyntaxException;
 import com.streamchat.AbstractChatSource;
 import com.streamchat.ChatSink;
 import com.streamchat.StreamChatMessage;
+import com.streamchat.StreamEventType;
 import com.streamchat.StreamPlatform;
 import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.HttpUrl;
@@ -44,6 +46,10 @@ public class YouTubeChatSource extends AbstractChatSource
 	/** Floor on the API's suggested poll interval, so a busy chat cannot drain the daily quota. */
 	private static final long MIN_POLL_INTERVAL_MS = 2_000L;
 	private static final long DEFAULT_POLL_INTERVAL_MS = 5_000L;
+
+	/** One or more {@code :shortcode:} tokens and nothing else. */
+	private static final Pattern EMOJI_SHORTCODES =
+		Pattern.compile("(?:\\s*:[A-Za-z0-9_+-]+:\\s*)+");
 
 	private final OkHttpClient httpClient;
 	private final Gson gson;
@@ -390,7 +396,65 @@ public class YouTubeChatSource extends AbstractChatSource
 			.message(text)
 			.authorColor(null)
 			.id(id != null ? id : name + ' ' + text)
+			.eventType(classify(optString(snippet, "type")))
+			.emoteOnly(isEmoteOnly(text))
 			.build());
+	}
+
+	/**
+	 * True when the message is only YouTube custom emoji.
+	 *
+	 * <p>YouTube renders channel emoji into {@code displayMessage} as {@code :shortcode:} tokens.
+	 * Unicode emoji need no handling here: {@link com.streamchat.ChatText#clean} already drops
+	 * anything the game font cannot draw, and a message left empty by that is discarded anyway.
+	 */
+	static boolean isEmoteOnly(@Nullable String text)
+	{
+		if (text == null)
+		{
+			return false;
+		}
+
+		final String trimmed = text.trim();
+		return !trimmed.isEmpty() && EMOJI_SHORTCODES.matcher(trimmed).matches();
+	}
+
+	/**
+	 * Maps a live chat message type to an event kind, or null for an ordinary chat line.
+	 *
+	 * <p>YouTube reports memberships and Super Chats as distinct message types rather than as
+	 * separate events, so they arrive on the same feed as normal chat.
+	 */
+	@Nullable
+	static StreamEventType classify(@Nullable String snippetType)
+	{
+		if (snippetType == null)
+		{
+			return null;
+		}
+
+		switch (snippetType)
+		{
+			case "newSponsorEvent":
+			case "memberMilestoneChatEvent":
+				return StreamEventType.SUBSCRIPTION;
+
+			case "membershipGiftingEvent":
+			case "giftMembershipReceivedEvent":
+				return StreamEventType.GIFT;
+
+			case "superChatEvent":
+			case "superStickerEvent":
+				return StreamEventType.DONATION;
+
+			case "textMessageEvent":
+			case "chatEndedEvent":
+			case "tombstone":
+				return null;
+
+			default:
+				return null;
+		}
 	}
 
 	/**

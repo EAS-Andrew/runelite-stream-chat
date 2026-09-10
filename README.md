@@ -1,7 +1,7 @@
 # Stream Chat
 
-Shows live **Twitch**, **YouTube** and **Kick** chat in the RuneScape chatbox, with a per-platform
-icon on every line.
+Shows live **Twitch**, **YouTube** and **Kick** chat in the RuneScape chatbox or in a movable
+on-screen panel, with a per-platform icon on every line.
 
 ![icons](docs/icons.png)
 
@@ -42,8 +42,6 @@ Everything lives under the plugin's config panel, grouped by platform.
 That is the whole setup. **No account, login or token is needed.** Twitch accepts anonymous
 read-only IRC connections, and still sends display names and name colours, so a token would add
 nothing to a read-only feed. Pasted URLs and leading `#`/`@` are tolerated.
-
-**Show subs and raids** additionally prints subscription, gift and raid announcements.
 
 ### Kick
 
@@ -95,19 +93,74 @@ messages, and this plugin does neither.
 
 ---
 
-## Display and filtering
+## Display
 
 | Option | Notes |
 | --- | --- |
-| **Show in** | Which chatbox tab to print to: Game, Channel, Clan or Trade. Channel/Clan keeps stream chat out of your game messages. |
+| **Display** | Chatbox, on-screen panel, or both. |
+| **Chatbox tab** | Which tab to print to: Game, Channel, Clan or Trade. Channel/Clan keeps stream chat out of your game messages. |
 | **Source icon** | The per-platform icon prefix. |
 | **Show channel name** | Useful when watching several channels at once. |
 | **Colour author names** | Uses the chatter's own colour where the platform sends one. Very dark names are brightened so they stay readable. |
 | **Max message length** | Long messages are truncated. |
-| **Messages per tick** | Print budget per 0.6s tick. This is the main flood control. |
-| **Queue size** | When full, the **oldest** messages are dropped so the chatbox stays live instead of falling behind. |
+
+## On-screen panel
+
+A movable, resizable panel, as an alternative to the chatbox. Drag it anywhere; **drag its edge to
+set a height** and it fills with as many recent messages as fit, newest at the bottom, like a chat
+window. Position and size persist.
+
+| Option | Notes |
+| --- | --- |
+| **Max messages** | How many to keep. A fixed height shows as many of these as fit. |
+| **Width** | Starting width. Dragging overrides it. |
+| **Background** | Transparent by default. Raise the alpha for a solid panel. |
+| **Message text** | Body colour. Author names use the platform/chatter colour. |
+| **Font** | Client default, small, regular or bold. |
+| **Text shadow** | On by default, and worth keeping while the background is transparent. |
+| **Border** | Thin outline. |
+
+## Events
+
+Subscriptions, gifted subs, raids, cheers and Super Chats are detected on all three platforms:
+
+| Platform | Detected from |
+| --- | --- |
+| Twitch | `USERNOTICE` (subs, resubs, prime upgrades, gifts, mystery gifts, raids) plus the `bits` tag for cheers |
+| Kick | `SubscriptionEvent`, `GiftedSubscriptionsEvent`, `StreamHostEvent` |
+| YouTube | memberships, member milestones, gift memberships, Super Chats and Super Stickers |
+
+| Option | Notes |
+| --- | --- |
+| **Show events** | Show them alongside chat. |
+| **Highlight events** / **Event colour** | Draw event lines in their own colour. |
+| **React to** | Every event, subs + gifts + raids, or subs only. |
+| **Sound** | A game sound effect. |
+| **Notification** | A RuneLite notification, following your notification settings. |
+| **Play graphic** | Level-up, **99** or max-cape fireworks on your character. |
+| **Play emote** | An emote animation, when you are idle. |
+
+> **These reactions send nothing to the game.** The sound plays locally, the notification is a
+> desktop one, and the graphic and emote are written onto your character's *rendering* only -- no
+> packet, nothing server-side, and no other player sees them. Automating a real emote would be input
+> simulation, which breaks Jagex's third-party client rules; this deliberately is not that.
+
+## Filters
+
+| Option | Notes |
+| --- | --- |
+| **Messages per tick** | Print budget per 0.6s tick. The main flood control. |
+| **Queue size** | When full, the **oldest** messages are dropped so the chatbox stays live. |
+| **Note dropped messages** | An occasional `(n messages skipped)` line. |
 | **Hide bot commands** | Hides messages starting with `!` or `?`. |
+| **Hide emote-only messages** | Hides messages with no words of their own. |
 | **Blocked users / words** | Comma separated, case insensitive. |
+
+Emote-only detection uses what each platform reports -- Twitch's `emotes` tag character ranges,
+Kick's `[emote:id:name]` markup, YouTube's `:shortcode:` tokens -- rather than guessing from the
+text, so it cannot swallow a real message. BTTV/FFZ/7TV emotes are *not* detected: they never appear
+in Twitch's emote tag, and identifying them would mean downloading those services' emote lists,
+which is exactly what the Plugin Hub rejects emote plugins for.
 
 Type `::streamchat` in game to print the connection status of each platform.
 
@@ -120,6 +173,11 @@ letting that push your game messages out of view, incoming messages go through a
 per-tick print budget. When the queue overflows the **oldest** entries are discarded, so what you see
 stays close to live, and an occasional `(n messages skipped)` line makes the gap visible rather than
 silent.
+
+Messages also expire after 30 seconds. Game ticks only fire while you are logged in, so nothing is
+printed at the login screen, during a world hop, or on a disconnect -- while the feeds keep
+receiving. Without that cap, everything buffered during those gaps would arrive in one burst the
+moment ticks resumed.
 
 Reconnection uses exponential backoff capped at five minutes, with jitter so several channels do not
 all reconnect in lockstep after an outage. Errors that retrying cannot fix &mdash; a rejected API
@@ -143,7 +201,10 @@ covered by tests in `ChatTextTest`.
   any stream.
 - Network connections are only to `irc-ws.chat.twitch.tv`, `ws-us2.pusher.com`, `kick.com` and
   `googleapis.com`.
-- Your YouTube API key is stored in your RuneLite config and sent only to `googleapis.com`.
+- Your YouTube API key is sent only to `googleapis.com`. It is stored in plain text in your
+  RuneLite profile, like every other RuneLite setting -- the config field masks it on screen but
+  does not encrypt it, and it syncs to RuneLite's servers if you use a RuneLite account. Restrict
+  the key to the YouTube Data API v3 so a leak is limited to read-only quota use.
 - No credentials are bundled with the plugin.
 
 ---
@@ -171,6 +232,8 @@ they are hand-placed pixel art with no antialiasing &mdash; see `tools/make_icon
 | `MessageRouter` | Filtering, de-duplication, rate limiting, rendering |
 | `ChatText` | Sanitising. The security boundary. |
 | `ChatIcons` | Registers the source icons, resolves `<img=n>` indices |
+| `StreamChatOverlay` | The on-screen panel: layout, wrapping, styling |
+| `EventReactions` | Client-side reactions to events (sound, notification, graphic, emote) |
 | `AbstractChatSource` | Lifecycle, status, reconnect backoff shared by all sources |
 | `twitch/` | IRC-over-WebSocket client + IRCv3 parser |
 | `youtube/` | Data API v3 polling + target parsing |

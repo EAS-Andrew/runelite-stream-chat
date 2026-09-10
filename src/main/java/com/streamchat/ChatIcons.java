@@ -3,6 +3,7 @@ package com.streamchat;
 import java.awt.image.BufferedImage;
 import java.util.EnumMap;
 import java.util.Map;
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +23,9 @@ public class ChatIcons
 {
 	private final ChatIconManager chatIconManager;
 	private final Map<StreamPlatform, Integer> iconIds = new EnumMap<>(StreamPlatform.class);
+
+	/** The same artwork, kept for the overlay, which draws with Java2D rather than chat markup. */
+	private final Map<StreamPlatform, BufferedImage> images = new EnumMap<>(StreamPlatform.class);
 	private boolean loaded;
 
 	@Inject
@@ -48,8 +52,30 @@ public class ChatIcons
 				continue;
 			}
 
+			images.put(platform, image);
 			iconIds.put(platform, chatIconManager.registerChatIcon(image));
 		}
+	}
+
+	/**
+	 * Loads just the artwork, with no client involvement.
+	 *
+	 * <p>The overlay can draw before the client has booted far enough to register chat icons, so it
+	 * must not depend on {@link #load()} having run.
+	 */
+	@Nullable
+	public BufferedImage image(StreamPlatform platform)
+	{
+		BufferedImage image = images.get(platform);
+		if (image == null)
+		{
+			image = ImageUtil.loadImageResource(ChatIcons.class, platform.getIconResource());
+			if (image != null)
+			{
+				images.put(platform, image);
+			}
+		}
+		return image;
 	}
 
 	/**

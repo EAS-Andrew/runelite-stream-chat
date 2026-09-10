@@ -6,6 +6,7 @@ import com.google.gson.JsonSyntaxException;
 import com.streamchat.AbstractChatSource;
 import com.streamchat.ChatSink;
 import com.streamchat.StreamChatMessage;
+import com.streamchat.StreamEventType;
 import com.streamchat.StreamPlatform;
 import java.awt.Color;
 import java.io.IOException;
@@ -54,6 +55,9 @@ public class KickChatSource extends AbstractChatSource
 
 	private static final String CHANNEL_API = "https://kick.com/api/v2/channels/";
 	private static final String CHAT_MESSAGE_EVENT = "App\\Events\\ChatMessageEvent";
+	private static final String SUBSCRIPTION_EVENT = "App\\Events\\SubscriptionEvent";
+	private static final String GIFTED_SUBS_EVENT = "App\\Events\\GiftedSubscriptionsEvent";
+	private static final String STREAM_HOST_EVENT = "App\\Events\\StreamHostEvent";
 
 	/**
 	 * Kick inlines emotes in the message body as {@code [emote:<id>:<name>]}. The game cannot show
@@ -273,6 +277,12 @@ public class KickChatSource extends AbstractChatSource
 				handleChatMessage(frame);
 				break;
 
+			case SUBSCRIPTION_EVENT:
+			case GIFTED_SUBS_EVENT:
+			case STREAM_HOST_EVENT:
+				handleEvent(event, frame);
+				break;
+
 			default:
 				// pusher_internal:subscription_succeeded and Kick's other channel events.
 				break;
@@ -364,7 +374,24 @@ public class KickChatSource extends AbstractChatSource
 			.message(content)
 			.authorColor(color)
 			.id(id != null ? id : author + ' ' + content)
+			.emoteOnly(isEmoteOnly(rawContent))
 			.build());
+	}
+
+	/**
+	 * True when the message is nothing but emote markup.
+	 *
+	 * <p>Kick is the easy case: emotes are explicit {@code [emote:id:NAME]} tokens, so removing
+	 * them outright and checking for leftovers is exact.
+	 */
+	static boolean isEmoteOnly(String rawContent)
+	{
+		if (rawContent == null || rawContent.indexOf("[emote:") == -1)
+		{
+			return false;
+		}
+
+		return EMOTE_MARKUP.matcher(rawContent).replaceAll("").trim().isEmpty();
 	}
 
 	/** Rewrites {@code [emote:123:KEKW]} to {@code KEKW}. */
@@ -385,6 +412,93 @@ public class KickChatSource extends AbstractChatSource
 		m.appendTail(out);
 
 		return out.toString().trim();
+	}
+
+	/**
+	 * Turns Kick's subscription/host events into a readable line.
+	 *
+	 * <p>Kick does not send a pre-rendered message the way Twitch's {@code system-msg} does, so the
+	 * wording is built here from whichever fields are present.
+	 */
+	private void handleEvent(String event, JsonObject frame)
+	{
+		if (!frame.has("data") || !frame.get("data").isJsonPrimitive())
+		{
+			return;
+		}
+
+		final JsonObject payload;
+		try
+		{
+			payload = gson.fromJson(frame.get("data").getAsString(), JsonObject.class);
+		}
+		catch (JsonSyntaxException ex)
+		{
+			log.debug("[Kick] unparseable event payload", ex);
+			return;
+		}
+
+		if (payload == null)
+		{
+			return;
+		}
+
+		final String text;
+		final StreamEventType type;
+
+		switch (event)
+		{
+			case SUBSCRIPTION_EVENT:
+			{
+				final String user = optString(payload, "username");
+				if (user == null)
+				{
+					return;
+				}
+				final String months = optString(payload, "months");
+				type = StreamEventType.SUBSCRIPTION;
+				text = months == null
+					? user + " subscribed!"
+					: user + " subscribed for " + months + " months!";
+				break;
+			}
+
+			case GIFTED_SUBS_EVENT:
+			{
+				final String gifter = optString(payload, "gifter_username");
+				int count = 0;
+				if (payload.has("gifted_usernames") && payload.get("gifted_usernames").isJsonArray())
+				{
+					count = payload.getAsJsonArray("gifted_usernames").size();
+				}
+				type = StreamEventType.GIFT;
+				text = (gifter == null ? "Someone" : gifter) + " gifted " + count + " subs!";
+				break;
+			}
+
+			case STREAM_HOST_EVENT:
+			{
+				final String host = optString(payload, "host_username");
+				final String viewers = optString(payload, "number_viewers");
+				type = StreamEventType.RAID;
+				text = (host == null ? "Someone" : host) + " hosted the stream"
+					+ (viewers == null ? "!" : " with " + viewers + " viewers!");
+				break;
+			}
+
+			default:
+				return;
+		}
+
+		sink.onMessage(StreamChatMessage.builder()
+			.platform(StreamPlatform.KICK)
+			.channel("")
+			.author("")
+			.message(text)
+			.authorColor(null)
+			.id(event + ' ' + text)
+			.eventType(type)
+			.build());
 	}
 
 	@Nullable

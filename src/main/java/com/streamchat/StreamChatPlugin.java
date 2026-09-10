@@ -33,6 +33,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.Text;
 import okhttp3.OkHttpClient;
 
@@ -63,6 +64,12 @@ public class StreamChatPlugin extends Plugin
 
 	@Inject
 	private ChatIcons icons;
+
+	@Inject
+	private StreamChatOverlay overlay;
+
+	@Inject
+	private OverlayManager overlayManager;
 
 	@Inject
 	private OkHttpClient okHttpClient;
@@ -97,6 +104,8 @@ public class StreamChatPlugin extends Plugin
 		};
 		executor = Executors.newSingleThreadScheduledExecutor(threadFactory);
 
+		overlayManager.add(overlay);
+
 		clientThread.invoke(this::loadIconsIfReady);
 		rebuildSources();
 	}
@@ -104,6 +113,8 @@ public class StreamChatPlugin extends Plugin
 	@Override
 	protected void shutDown()
 	{
+		overlayManager.remove(overlay);
+
 		if (pendingRebuild != null)
 		{
 			pendingRebuild.cancel(false);
@@ -213,7 +224,7 @@ public class StreamChatPlugin extends Plugin
 			if (!channels.isEmpty())
 			{
 				sources.put(StreamPlatform.TWITCH, new TwitchChatSource(
-					exec, router, okHttpClient, channels, config.twitchEvents()));
+					exec, router, okHttpClient, channels));
 			}
 		}
 

@@ -1,5 +1,7 @@
 package com.streamchat;
 
+import java.awt.Color;
+import net.runelite.client.config.Alpha;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -41,9 +43,23 @@ public interface StreamChatConfig extends Config
 	String displaySection = "displaySection";
 
 	@ConfigSection(
+		name = "On-screen panel",
+		description = "Appearance of the movable panel, when Display is set to use it",
+		position = 4
+	)
+	String overlaySection = "overlaySection";
+
+	@ConfigSection(
+		name = "Events",
+		description = "Subs, gifts, raids and donations, and how to react to them",
+		position = 5
+	)
+	String eventSection = "eventSection";
+
+	@ConfigSection(
 		name = "Filters",
 		description = "What to hide, and how fast messages arrive",
-		position = 4
+		position = 6
 	)
 	String filterSection = "filterSection";
 
@@ -73,18 +89,6 @@ public interface StreamChatConfig extends Config
 		return "";
 	}
 
-	@ConfigItem(
-		keyName = "twitchEvents",
-		name = "Show subs and raids",
-		description = "Also show subscription, gift and raid announcements, not just chat messages.",
-		position = 2,
-		section = twitchSection
-	)
-	default boolean twitchEvents()
-	{
-		return false;
-	}
-
 	// ----------------------------------------------------------------- YouTube
 
 	@ConfigItem(
@@ -102,8 +106,9 @@ public interface StreamChatConfig extends Config
 	@ConfigItem(
 		keyName = "youtubeApiKey",
 		name = "API key",
-		description = "A YouTube Data API v3 key from your own Google Cloud project. Stored in your RuneLite"
-			+ " config and sent only to googleapis.com. See the plugin README for how to create one.",
+		description = "A YouTube Data API v3 key from your own Google Cloud project. Sent only to"
+			+ " googleapis.com. Note it is stored in plain text in your RuneLite profile like any other"
+			+ " setting (masked here, not encrypted), so restrict the key to the YouTube Data API.",
 		position = 1,
 		section = youtubeSection,
 		secret = true
@@ -198,10 +203,23 @@ public interface StreamChatConfig extends Config
 	// ----------------------------------------------------------------- Display
 
 	@ConfigItem(
-		keyName = "chatTarget",
-		name = "Show in",
-		description = "Which chatbox tab stream messages appear in.",
+		keyName = "displayMode",
+		name = "Display",
+		description = "Show messages in the chatbox, in a movable on-screen panel, or both.",
 		position = 0,
+		section = displaySection
+	)
+	default DisplayMode displayMode()
+	{
+		return DisplayMode.CHATBOX;
+	}
+
+	@ConfigItem(
+		keyName = "chatTarget",
+		name = "Chatbox tab",
+		description = "Which chatbox tab stream messages appear in. Ignored when displaying only in"
+			+ " the on-screen panel.",
+		position = 1,
 		section = displaySection
 	)
 	default ChatTarget chatTarget()
@@ -213,7 +231,7 @@ public interface StreamChatConfig extends Config
 		keyName = "showIcon",
 		name = "Source icon",
 		description = "Prefix each line with the platform's icon.",
-		position = 1,
+		position = 4,
 		section = displaySection
 	)
 	default boolean showIcon()
@@ -225,7 +243,7 @@ public interface StreamChatConfig extends Config
 		keyName = "showChannel",
 		name = "Show channel name",
 		description = "Include the channel the message came from. Useful when watching several at once.",
-		position = 2,
+		position = 5,
 		section = displaySection
 	)
 	default boolean showChannel()
@@ -238,7 +256,7 @@ public interface StreamChatConfig extends Config
 		name = "Colour author names",
 		description = "Use the chatter's own name colour where the platform provides one, otherwise the"
 			+ " platform's colour.",
-		position = 3,
+		position = 6,
 		section = displaySection
 	)
 	default boolean colorAuthors()
@@ -252,12 +270,116 @@ public interface StreamChatConfig extends Config
 		name = "Max message length",
 		description = "Longer messages are truncated with an ellipsis, so one wall of text cannot fill the"
 			+ " chatbox.",
-		position = 4,
+		position = 7,
 		section = displaySection
 	)
 	default int maxMessageLength()
 	{
 		return 180;
+	}
+
+	// ------------------------------------------------------------------ Events
+
+	@ConfigItem(
+		keyName = "showEvents",
+		name = "Show events",
+		description = "Show subscriptions, gifted subs, raids, cheers and Super Chats alongside chat.",
+		position = 0,
+		section = eventSection
+	)
+	default boolean showEvents()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "highlightEvents",
+		name = "Highlight events",
+		description = "Draw event lines in their own colour so they stand out from ordinary chat.",
+		position = 1,
+		section = eventSection
+	)
+	default boolean highlightEvents()
+	{
+		return true;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "eventColor",
+		name = "Event colour",
+		description = "Colour used for event lines.",
+		position = 2,
+		section = eventSection
+	)
+	default Color eventColor()
+	{
+		return new Color(0xFFD44D);
+	}
+
+	@ConfigItem(
+		keyName = "eventTrigger",
+		name = "React to",
+		description = "Which events set off the sound, notification and animation below.",
+		position = 3,
+		section = eventSection
+	)
+	default EventTrigger eventTrigger()
+	{
+		return EventTrigger.SUBS_AND_GIFTS;
+	}
+
+	@ConfigItem(
+		keyName = "eventSound",
+		name = "Sound",
+		description = "Play a game sound when a matching event lands.",
+		position = 4,
+		section = eventSection
+	)
+	default EventSound eventSound()
+	{
+		return EventSound.NONE;
+	}
+
+	@ConfigItem(
+		keyName = "eventNotify",
+		name = "Notification",
+		description = "Send a RuneLite notification, which follows your notification settings"
+			+ " (tray popup, sound, window flash).",
+		position = 5,
+		section = eventSection
+	)
+	default boolean eventNotify()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "eventGraphic",
+		name = "Play graphic",
+		description = "Play a graphic effect on your character when a matching event lands -- the"
+			+ " same fireworks you get for a level up. Purely visual and only you can see it: no"
+			+ " input is sent to the game and nothing happens server-side.",
+		position = 6,
+		section = eventSection
+	)
+	default EventGraphic eventGraphic()
+	{
+		return EventGraphic.NONE;
+	}
+
+	@ConfigItem(
+		keyName = "eventAnimation",
+		name = "Play emote",
+		description = "Play an emote animation on your character when a matching event lands."
+			+ " This is purely visual and only you can see it -- no input is sent to the game and"
+			+ " nothing happens server-side. It is cancelled the moment you do anything.",
+		position = 7,
+		section = eventSection
+	)
+	default EmoteAnimation eventAnimation()
+	{
+		return EmoteAnimation.NONE;
 	}
 
 	// ----------------------------------------------------------------- Filters
@@ -316,10 +438,24 @@ public interface StreamChatConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "hideEmoteOnly",
+		name = "Hide emote-only messages",
+		description = "Hide messages that contain nothing but emotes, which the game cannot draw"
+			+ " anyway and which show up as a wall of names like 'KEKW KEKW'. Only counts emotes the"
+			+ " platform tells us about, so BTTV/7TV emotes still come through as text.",
+		position = 4,
+		section = filterSection
+	)
+	default boolean hideEmoteOnly()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "blockedUsers",
 		name = "Blocked users",
 		description = "Comma separated names to hide entirely. Case insensitive. Useful for chat bots.",
-		position = 4,
+		position = 5,
 		section = filterSection
 	)
 	default String blockedUsers()
@@ -327,11 +463,104 @@ public interface StreamChatConfig extends Config
 		return "";
 	}
 
+	// ----------------------------------------------------------- On-screen panel
+
+	@Range(min = 1, max = 50)
+	@ConfigItem(
+		keyName = "overlayLines",
+		name = "Max messages",
+		description = "How many recent messages the panel keeps. Once you drag the panel to a fixed"
+			+ " height it shows as many of these as actually fit.",
+		position = 0,
+		section = overlaySection
+	)
+	default int overlayLines()
+	{
+		return 8;
+	}
+
+	@Range(min = 120, max = 800)
+	@ConfigItem(
+		keyName = "overlayWidth",
+		name = "Width",
+		description = "Starting width in pixels. Dragging the panel's edge in game overrides this.",
+		position = 1,
+		section = overlaySection
+	)
+	default int overlayWidth()
+	{
+		return 250;
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "overlayBackgroundColor",
+		name = "Background",
+		description = "Panel background. Transparent by default; raise the alpha for a solid panel."
+			+ " Keep 'Text shadow' on when this is see-through.",
+		position = 2,
+		section = overlaySection
+	)
+	default Color overlayBackgroundColor()
+	{
+		return new Color(0, 0, 0, 0);
+	}
+
+	@Alpha
+	@ConfigItem(
+		keyName = "overlayTextColor",
+		name = "Message text",
+		description = "Colour of the message body. Author names use the platform/chatter colour.",
+		position = 3,
+		section = overlaySection
+	)
+	default Color overlayTextColor()
+	{
+		return Color.WHITE;
+	}
+
+	@ConfigItem(
+		keyName = "overlayFont",
+		name = "Font",
+		description = "Font used by the panel.",
+		position = 4,
+		section = overlaySection
+	)
+	default OverlayFont overlayFont()
+	{
+		return OverlayFont.DEFAULT;
+	}
+
+	@ConfigItem(
+		keyName = "overlayShadow",
+		name = "Text shadow",
+		description = "Draw a drop shadow behind the text, which keeps it readable over a transparent"
+			+ " background.",
+		position = 5,
+		section = overlaySection
+	)
+	default boolean overlayShadow()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "overlayBorder",
+		name = "Border",
+		description = "Draw a thin border around the panel.",
+		position = 6,
+		section = overlaySection
+	)
+	default boolean overlayBorder()
+	{
+		return false;
+	}
+
 	@ConfigItem(
 		keyName = "blockedWords",
 		name = "Blocked words",
 		description = "Comma separated. Any message containing one of these is hidden. Case insensitive.",
-		position = 5,
+		position = 6,
 		section = filterSection
 	)
 	default String blockedWords()
